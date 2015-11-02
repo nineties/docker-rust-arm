@@ -2,28 +2,42 @@ FROM ubuntu:latest
 MAINTAINER yasuyuky <yasuyuki.ymd@gmail.com>
 
 RUN apt-get -y update \
-&&  apt-get -y install git \
-                       gcc-arm-linux-gnueabihf \
-                       make \
-                       curl \
-                       python2.7 \
-                       g++
-ENV RUST_VERSION=1.4.0
-RUN mkdir /src \
-&&  cd /src \
-&&  curl -sSf https://static.rust-lang.org/dist/rustc-${RUST_VERSION}-src.tar.gz | tar xzf - \
-&&  cd rustc-${RUST_VERSION} \
-&&  ./configure --target=x86_64-unknown-linux-gnu,arm-unknown-linux-gnueabihf \
-&&  make && make install \
-&&  cd /src \
-&&  rm -rf rustc-${RUST_VERSION}
-RUN curl -sSf https://static.rust-lang.org/cargo-dist/cargo-nightly-x86_64-unknown-linux-gnu.tar.gz | tar xzf - \
-&&  cd cargo-nightly-x86_64-unknown-linux-gnu \
-&&  ./install.sh \
-&&  cd / \
-&&  rm -rf src
-RUN mkdir source \
-&&  mkdir .cargo \
-&&  echo "[target.arm-unknown-linux-gnueabihf]\nlinker = \"arm-linux-gnueabihf-gcc-4.8\"" > .cargo/config
+ && apt-get -y install make curl python g++ cmake libssl-dev
+
+RUN git clone https://github.com/raspberrypi/tools.git /pi-tools \
+ && mv /pi-tools/arm-bcm2708/gcc-linaro-arm-linux-gnueabihf-raspbian-x64 /gcc-linaro-arm-linux-gnueabihf-raspbian-x64 \
+ && mv /pi-tools/arm-bcm2708/arm-bcm2708hardfp-linux-gnueabi/arm-bcm2708hardfp-linux-gnueabi/sysroot /sysroot \
+ && rm -rf /pi-tools
+
+ENV PATH=/gcc-linaro-arm-linux-gnueabihf-raspbian-x64/bin:$PATH
+
+RUN git clone http://github.com/rust-lang/rust.git \
+ && cd rust \
+ && ./configure --target=x86_64-unknown-linux-gnu,arm-unknown-linux-gnueabihf \
+ && make -j 4 \
+ && make install \
+ && cd .. \
+ && rm -rf rust
+
+RUN git clone https://github.com/rust-lang/cargo.git \
+ && cd cargo \
+ && git submodule update --init \
+ && python -B src/etc/install-deps.py \
+ && ./configure --local-rust-root="$PWD"/rustc \
+ && make -j 4 \
+ && make install \
+ && cd .. \
+ && rm -rf cargo
+
+ADD gcc-sysroot /gcc-linaro-arm-linux-gnueabihf-raspbian-x64/bin/gcc-sysroot 
+RUN chmod +x /gcc-linaro-arm-linux-gnueabihf-raspbian-x64/bin/gcc-sysroot
+
+ADD cargo-config .cargo/config
+RUN mv /usr/local/bin/cargo /usr/local/bin/cargo-orig
+ADD cargo /usr/local/bin/cargo
+RUN chmod +x /usr/local/bin/cargo
+
+RUN mkdir source
+
 WORKDIR source
 CMD ["bash"]
